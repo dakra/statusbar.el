@@ -32,6 +32,7 @@
 
 ;;; Code:
 
+(require 'subr-x)
 (require 'posframe)
 
 
@@ -88,13 +89,19 @@ If you use exwm systray, Offset counts from the last systray icon."
   "Return statusbar buffer."
   (get-buffer-create statusbar--buffer-name))
 
+(defun statusbar--line-length (buf)
+  "Return current line length of the statusbar text.
+BUF is the statusbar buffer."
+  (with-current-buffer buf
+    (point-max)))
+
 (defun statusbar--position-handler (info)
   "Posframe position handler.
 INFO is the childframe plist from `posframe'.
 Position the statusbar in the bottom right over the minibuffer."
   (let* ((font-width (plist-get info :font-width))
          (buf (plist-get info :posframe-buffer))
-         (buf-width (* font-width (statusbar-line-length buf)))
+         (buf-width (* font-width (statusbar--line-length buf)))
          (parent-frame (plist-get info :parent-frame))
          (parent-frame-width (frame-pixel-width parent-frame))
          (exwm-systemtray-offset
@@ -110,20 +117,16 @@ Position the statusbar in the bottom right over the minibuffer."
 
 (defun statusbar--display (&rest txts)
   "Display TXTS in the statusbar."
-  ;; FIXME: Better way to set read-only for buffer with posframe
-  ;;        let binding doesn't work
-  (with-current-buffer (statusbar--get-buffer)
-    (setq buffer-read-only nil))
   (let ((buf (statusbar--get-buffer))
-        (posframe-mouse-banish nil))
-    (posframe-show (statusbar--get-buffer)
+        (posframe-mouse-banish nil)
+        (inhibit-read-only t)
+        (buffer-read-only nil))
+    (posframe-show buf
                    :string (mapconcat 'identity txts statusbar-status-seperator)
                    :x-pixel-offset statusbar-x-offset
                    :poshandler 'statusbar--position-handler
                    :left-fringe statusbar-left-fringe
-                   :right-fringe statusbar-right-fringe))
-  (with-current-buffer (statusbar--get-buffer)
-    (setq buffer-read-only t)))
+                   :right-fringe statusbar-right-fringe)))
 
 (defun statusbar--delete ()
   "Delete statusbar frame and buffer.
@@ -133,7 +136,7 @@ This will only delete the frame and *NOT* remove the variable watchers."
 
 (defun statusbar--transfer-modeline-vars (&rest _)
   "Watch variables from the modeline and put them in the statusbar."
-  (loop-for-each var statusbar-modeline-variables
+  (dolist (var statusbar-modeline-variables)
     (when (memq var global-mode-string)
       (add-variable-watcher var #'statusbar-refresh)
       (setq global-mode-string (delete var global-mode-string)))))
@@ -142,7 +145,7 @@ This will only delete the frame and *NOT* remove the variable watchers."
 
 (defun statusbar-refresh (&rest _)
   "Refresh statusbar with new variable values."
-  (apply #'statusbar-display statusbar-note
+  (apply #'statusbar--display statusbar-note
          (mapcar #'symbol-value (append statusbar-variables statusbar-modeline-variables))))
 
 (defun statusbar-add-note (note)
@@ -174,7 +177,7 @@ This will only delete the frame and *NOT* remove the variable watchers."
         (add-variable-watcher 'global-mode-string #'statusbar--transfer-modeline-vars))
 
     (setq focus-in-hook (delete 'statusbar-refresh focus-in-hook))
-    (loop-for-each var statusbar-modeline-variables
+    (dolist (var statusbar-modeline-variables)
       (remove-variable-watcher var #'statusbar-refresh)
       (add-to-list 'global-mode-string var t))
     (statusbar--delete))
