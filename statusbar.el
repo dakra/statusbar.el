@@ -33,6 +33,7 @@
 ;;; Code:
 
 (require 'subr-x)
+(require 'dash)
 (require 'posframe)
 
 
@@ -76,6 +77,14 @@ If you use exwm systray, Offset counts from the last systray icon."
   "Right fringe width of the statusbar."
   :type 'integer)
 
+;;; Compatibility
+
+;; Those will be defined be exwm and are used to calculate the
+;; width of the exwm systemtray
+(defvar exwm-systemtray--list)
+(defvar exwm-systemtray--icon-min-size)
+(defvar exwm-systemtray-icon-gap)
+
 
 ;;; Variables
 
@@ -88,6 +97,16 @@ If you use exwm systray, Offset counts from the last systray icon."
 (defun statusbar--get-buffer ()
   "Return statusbar buffer."
   (get-buffer-create statusbar--buffer-name))
+
+(defun statusbar--get-variables ()
+  "Return the value of the variables to display in the statusbar.
+Joins `statusbar-variables' and `statusbar-modeline-variables' and
+filters empty and unbound variables."
+  (-keep (lambda (v)
+           (and (boundp v)
+                (not (string-empty-p (symbol-value v)))
+                (symbol-value v)))
+         (append statusbar-variables statusbar-modeline-variables)))
 
 (defun statusbar--line-length (buf)
   "Return current line length of the statusbar text.
@@ -105,7 +124,7 @@ Position the statusbar in the bottom right over the minibuffer."
          (parent-frame (plist-get info :parent-frame))
          (parent-frame-width (frame-pixel-width parent-frame))
          (exwm-systemtray-offset
-          (if-let* ((tray-list exwm-systemtray--list)
+          (if-let* ((tray-list (and (boundp 'exwm-systemtray--list) exwm-systemtray--list))
                     (icon-size (+ exwm-systemtray--icon-min-size exwm-systemtray-icon-gap))
                     (tray-width (* (length exwm-systemtray--list) icon-size)))
               tray-width
@@ -119,8 +138,8 @@ Position the statusbar in the bottom right over the minibuffer."
   "Display TXTS in the statusbar."
   (let ((buf (statusbar--get-buffer))
         (posframe-mouse-banish nil)
-        (inhibit-read-only t)
-        (buffer-read-only nil))
+        (buffer-read-only nil)
+        (inhibit-read-only t))
     (posframe-show buf
                    :string (mapconcat 'identity txts statusbar-status-seperator)
                    :x-pixel-offset statusbar-x-offset
@@ -134,19 +153,28 @@ This will only delete the frame and *NOT* remove the variable watchers."
   (posframe-delete-frame (statusbar--get-buffer))
   (kill-buffer (statusbar--get-buffer)))
 
-(defun statusbar--transfer-modeline-vars (&rest _)
+(defun statusbar--add-modeline-vars (&rest _)
   "Watch variables from the modeline and put them in the statusbar."
   (dolist (var statusbar-modeline-variables)
     (when (memq var global-mode-string)
       (add-variable-watcher var #'statusbar-refresh)
-      (setq global-mode-string (delete var global-mode-string)))))
+      (setq global-mode-string (delete var global-mode-string))))
+  (force-mode-line-update))
+
+(defun statusbar--remove-modeline-vars ()
+  "Watch variables from the modeline and put them in the statusbar."
+  (dolist (var statusbar-modeline-variables)
+    (when (memq 'statusbar-refresh (get-variable-watchers 'display-time-string))
+      (remove-variable-watcher var #'statusbar-refresh)
+      (add-to-list 'global-mode-string var t)))
+  (force-mode-line-update))
+
 
 ;;; Public functions
 
 (defun statusbar-refresh (&rest _)
   "Refresh statusbar with new variable values."
-  (apply #'statusbar--display statusbar-note
-         (mapcar #'symbol-value (append statusbar-variables statusbar-modeline-variables))))
+  (apply #'statusbar--display statusbar-note (statusbar--get-variables)))
 
 (defun statusbar-add-note (note)
   "Add a NOTE as first element in the statusbar."
@@ -169,19 +197,30 @@ This will only delete the frame and *NOT* remove the variable watchers."
   :global t
   (if statusbar-mode
       (progn
-        (add-to-list 'focus-in-hook 'statusbar-refresh)
-        (statusbar--transfer-modeline-vars)
+        (with-no-warnings
+          (if (not (boundp 'after-focus-change-function))
+              (add-hook 'focus-in-hook #'statusbar-refresh)
+            ;; `focus-in-hook' is obsolete in Emacs 27
+            (defun statusbar--refresh-with-focus-check ()
+              "Like `statusbar-refresh' but check `frame-focus-state' first."
+              (when (frame-focus-state)
+                (statusbar-refresh)))
+            (add-function :after after-focus-change-function #'statusbar--refresh-with-focus-check)))
+        (with-current-buffer (statusbar--get-buffer)
+          (setq buffer-read-only t))
+        (statusbar--add-modeline-vars)
         (statusbar-refresh)
         ;; Watch mode-line and when a mode that is specified in `statusbar-modeline-variables'
-        ;; Is activated, remove it from the mode-line and show it in the statusbar instead.
-        (add-variable-watcher 'global-mode-string #'statusbar--transfer-modeline-vars))
+        ;; is activated, remove it from the mode-line and show it in the statusbar instead.
+        (add-variable-watcher 'global-mode-string #'statusbar--add-modeline-vars))
 
-    (setq focus-in-hook (delete 'statusbar-refresh focus-in-hook))
-    (dolist (var statusbar-modeline-variables)
-      (remove-variable-watcher var #'statusbar-refresh)
-      (add-to-list 'global-mode-string var t))
-    (statusbar--delete))
-  (force-mode-line-update))
+    (with-no-warnings
+      (if (not (boundp 'after-focus-change-function))
+          (remove-hook 'focus-in-hook #'statusbar-refresh)
+        (setq focus-in-hook (delete 'statusbar-refresh focus-in-hook))
+        (remove-function after-focus-change-function #'statusbar--refresh-with-focus-check)))
+    (statusbar--remove-modeline-vars)
+    (statusbar--delete)))
 
 (provide 'statusbar)
 ;;; statusbar.el ends here
