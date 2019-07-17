@@ -1,4 +1,4 @@
-;;; statusbar.el --- Minor mode for working with statusbar projects  -*- lexical-binding: t -*-
+;;; statusbar.el --- Emacs statusbar          -*- lexical-binding: t -*-
 
 ;; Copyright (c) 2018 Daniel Kraus <daniel@kraus.my>
 
@@ -29,6 +29,8 @@
 ;;
 ;; Display statusbar in childfram in the bottom right over
 ;; parts of the minibuffer.
+
+;; See README.md for more details
 
 ;;; Code:
 
