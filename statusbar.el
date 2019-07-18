@@ -198,16 +198,22 @@ This will only delete the frame and *NOT* remove the variable watchers."
   "Global minor mode to toggle child frame statusbar."
   :global t
   (if statusbar-mode
+      ;; Enable statusbar-mode
       (progn
-        (with-no-warnings
-          (if (not (boundp 'after-focus-change-function))
-              (add-hook 'focus-in-hook #'statusbar-refresh)
-            ;; `focus-in-hook' is obsolete in Emacs 27
-            (defun statusbar--refresh-with-focus-check ()
-              "Like `statusbar-refresh' but check `frame-focus-state' first."
-              (when (frame-focus-state)
-                (statusbar-refresh)))
-            (add-function :after after-focus-change-function #'statusbar--refresh-with-focus-check)))
+        ;; When we're in exwm simply use the workspace-switch-hook
+        ;; instead of the normal Emacs frame functions/hooks
+        (if (boundp 'exwm-workspace-switch-hook)
+            (add-hook 'exwm-workspace-switch-hook #'statusbar-refresh)
+          ;; Check if we're on Emacs 27 where the frame focus functions changed
+          (with-no-warnings
+            (if (not (boundp 'after-focus-change-function))
+                (add-hook 'focus-in-hook #'statusbar-refresh)
+              ;; `focus-in-hook' is obsolete in Emacs 27
+              (defun statusbar--refresh-with-focus-check ()
+                "Like `statusbar-refresh' but check `frame-focus-state' first."
+                (when (frame-focus-state)
+                  (statusbar-refresh)))
+              (add-function :after after-focus-change-function #'statusbar--refresh-with-focus-check))))
         (with-current-buffer (statusbar--get-buffer)
           (setq buffer-read-only t))
         (statusbar--add-modeline-vars)
@@ -216,11 +222,14 @@ This will only delete the frame and *NOT* remove the variable watchers."
         ;; is activated, remove it from the mode-line and show it in the statusbar instead.
         (add-variable-watcher 'global-mode-string #'statusbar--add-modeline-vars))
 
-    (with-no-warnings
-      (if (not (boundp 'after-focus-change-function))
-          (remove-hook 'focus-in-hook #'statusbar-refresh)
-        (setq focus-in-hook (delete 'statusbar-refresh focus-in-hook))
-        (remove-function after-focus-change-function #'statusbar--refresh-with-focus-check)))
+    ;; Disable statusbar-mode
+    (if (boundp 'exwm-workspace-switch-hook)
+        (remove-hook 'exwm-workspace-switch-hook #'statusbar-refresh)
+      (with-no-warnings
+        (if (not (boundp 'after-focus-change-function))
+            (remove-hook 'focus-in-hook #'statusbar-refresh)
+          (setq focus-in-hook (delete 'statusbar-refresh focus-in-hook))
+          (remove-function after-focus-change-function #'statusbar--refresh-with-focus-check))))
     (statusbar--remove-modeline-vars)
     (statusbar--delete)))
 
