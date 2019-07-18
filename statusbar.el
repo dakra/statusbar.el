@@ -161,7 +161,8 @@ This will only delete the frame and *NOT* remove the variable watchers."
     (when (memq var global-mode-string)
       (add-variable-watcher var #'statusbar-refresh)
       (setq global-mode-string (delete var global-mode-string))))
-  (force-mode-line-update))
+  (force-mode-line-update)
+  (statusbar-refresh))
 
 (defun statusbar--remove-modeline-vars ()
   "Watch variables from the modeline and put them in the statusbar."
@@ -217,7 +218,6 @@ This will only delete the frame and *NOT* remove the variable watchers."
         (with-current-buffer (statusbar--get-buffer)
           (setq buffer-read-only t))
         (statusbar--add-modeline-vars)
-        (statusbar-refresh)
         ;; Watch mode-line and when a mode that is specified in `statusbar-modeline-variables'
         ;; is activated, remove it from the mode-line and show it in the statusbar instead.
         (add-variable-watcher 'global-mode-string #'statusbar--add-modeline-vars))
