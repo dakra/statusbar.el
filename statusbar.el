@@ -157,17 +157,20 @@ This will only delete the frame and *NOT* remove the variable watchers."
 
 (defun statusbar--add-modeline-vars (&rest _)
   "Watch variables from the modeline and put them in the statusbar."
-  (dolist (var statusbar-modeline-variables)
-    (when (memq var global-mode-string)
-      (add-variable-watcher var #'statusbar-refresh)
-      (setq global-mode-string (delete var global-mode-string))))
-  (force-mode-line-update)
-  (statusbar-refresh))
+  (let ((mode-line-changed-p nil))
+    (dolist (var statusbar-modeline-variables)
+      (when (memq var global-mode-string)
+        (setq mode-line-changed-p t)
+        (add-variable-watcher var #'statusbar-refresh)
+        (setq global-mode-string (delete var global-mode-string))))
+    (when mode-line-changed-p
+      (force-mode-line-update)
+      (statusbar-refresh))))
 
 (defun statusbar--remove-modeline-vars ()
   "Watch variables from the modeline and put them in the statusbar."
   (dolist (var statusbar-modeline-variables)
-    (when (memq 'statusbar-refresh (get-variable-watchers 'display-time-string))
+    (when (memq 'statusbar-refresh (get-variable-watchers 'var))
       (remove-variable-watcher var #'statusbar-refresh)
       (add-to-list 'global-mode-string var t)))
   (force-mode-line-update))
