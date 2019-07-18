@@ -228,7 +228,6 @@ This will only delete the frame and *NOT* remove the variable watchers."
       (with-no-warnings
         (if (not (boundp 'after-focus-change-function))
             (remove-hook 'focus-in-hook #'statusbar-refresh)
-          (setq focus-in-hook (delete 'statusbar-refresh focus-in-hook))
           (remove-function after-focus-change-function #'statusbar--refresh-with-focus-check))))
     (statusbar--remove-modeline-vars)
     (statusbar--delete)))
